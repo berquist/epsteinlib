@@ -8,3 +8,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ndarray = "0.16.1"
+ndarray-linalg = "0.17.0"
+num-complex = "0.4.6"
+special = "0.11.3"
