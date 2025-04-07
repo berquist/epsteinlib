@@ -115,7 +115,7 @@ double assignzArgBound(double nu) {
     if (nu > -600 && nu < 80) {
         return M_PI * 3.5 * 3.5;
     }
-    return DBL_MAX; // do not use expansion if nu is to big
+    return DBL_MAX; // do not use expansion if nu is too big
 }
 
 /**
