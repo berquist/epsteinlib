@@ -102,6 +102,16 @@ and in the Mathematica package as
 EpsteinZetaReg[\[Nu],A,x,y]
 ```
 
+and in the Rust package as
+```rust
+fn epstein_zeta_reg(
+    nu: ,
+    A: ,
+    x: ,
+    y: ,
+) ->
+```
+
 To ensure numerical stability when evaluating the regularized Epstein zeta function as a function of $\boldsymbol x$, we again implement the following cutoff:
 - If $(\boldsymbol x-\boldsymbol z)^2 < 10^{-64}$ for some $\boldsymbol z \in \Lambda$, we numerically set $\boldsymbol x = \boldsymbol z$.
 
