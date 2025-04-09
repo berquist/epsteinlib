@@ -29,3 +29,5 @@ dist
 # Rust
 /target
 Cargo.lock
+cobertura.xml
+tarpaulin-report.html
