@@ -10,7 +10,9 @@ add_library(${TGT}
     tools.c
     zeta.c
 )
-target_link_libraries(${TGT} m)
+if(UNIX)
+    target_link_libraries(${TGT} m)
+endif(UNIX)
 # TODO hack
 target_include_directories(${TGT} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 unset(TGT)
