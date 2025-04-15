@@ -34,10 +34,12 @@ fn sum_real(
     cutoffs: &[usize],
     z_arg_bound: f64,
 ) -> Complex64 {
+    let dim = m.ncols();
+    let mut zv = Array1::default(dim);
     // cuboid cutoffs
     let mut total_summands = 1;
     let mut total_cutoffs = Vec::new();
-    for k in 0..m.ncols() {
+    for k in 0..dim {
         total_cutoffs.push(total_summands);
         total_summands *= 2 * cutoffs[k] + 1;
     }
@@ -45,8 +47,7 @@ fn sum_real(
     let mut epsilon = c64(0.0, 0.0);
     // First Sum (in real space)
     for n in 0..total_summands {
-        let mut zv = Array1::default(m.ncols());
-        for k in 0..m.ncols() {
+        for k in 0..dim {
             zv[k] = (((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k]) as f64;
         }
         let mut lv = m.dot(&zv);
@@ -85,9 +86,44 @@ fn sum_fourier(
     cutoffs: &[usize],
     z_arg_bound: f64,
 ) -> Complex64 {
+    let dim = y.len();
+    let mut zv = Array1::default(dim); // counting vector in Z^dim
+                                       // let lv = Array1::default(dim); // lattice vector
+    let mut total_summands = 1;
+    let mut total_cutoffs = Vec::new();
+    for k in 0..dim {
+        total_cutoffs.push(total_summands);
+        total_summands *= 2 * cutoffs[k] + 1;
+    }
+    let zero_index = (total_summands - 1) / 2;
+    let mut sum = c64(0.0, 0.0);
+    let mut epsilon = c64(0.0, 0.0);
     // second sum (in fourier space)
+    for n in 0..zero_index {
+        for k in 0..dim {
+            zv[k] = (((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k]) as f64;
+        }
+        let lv = m_invt.dot(&zv) + y;
+        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x));
+        let auxy = rot * crandall::crandall_g(dim as f64 - nu, &lv, lambda, z_arg_bound) - epsilon;
+        let auxt = sum + auxy;
+        epsilon = (auxt - sum) - auxy;
+        sum = auxt;
+    }
     // skips zero
-    c64(0.0, 0.0)
+    // TODO this is all just the above; make a function of n
+    for n in zero_index + 1..total_summands {
+        for k in 0..dim {
+            zv[k] = (((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k]) as f64;
+        }
+        let lv = m_invt.dot(&zv) + y;
+        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x));
+        let auxy = rot * crandall::crandall_g(dim as f64 - nu, &lv, lambda, z_arg_bound) - epsilon;
+        let auxt = sum + auxy;
+        epsilon = (auxt - sum) - auxy;
+        sum = auxt;
+    }
+    sum
 }
 
 /// calculate projection of vector to elementary lattice cell.
@@ -123,6 +159,8 @@ fn epstein_zeta_internal(
     lambda: f64,
     reg: bool,
 ) -> Complex64 {
+    // 1. Transform: Compute determinant and fourier transformed matrix, scale
+    // both of them
     c64(0.0, 0.0)
 }
 
@@ -155,31 +193,77 @@ mod tests {
     use super::*;
 
     use manifest_dir_macros::path;
+    use ndarray::array;
+    use num_complex::ComplexFloat;
     use serde::Deserialize;
 
     #[test]
-    fn test_epsteinZeta_epsteinZetaReg() {
+    fn test_epstein_zeta() {
         #[derive(Debug, Deserialize)]
-        struct Record {
-            a: f64,
-            x: f64,
-            reference: f64,
-            epsilon: f64,
+        struct ZetaRecord {
+            nu_real: f64,
+            nu_imag: f64,
+            a1: f64,
+            a2: f64,
+            a3: f64,
+            a4: f64,
+            x1: f64,
+            x2: f64,
+            y1: f64,
+            y2: f64,
+            ref1: f64,
+            ref2: f64,
         }
         let path = path!("src", "tests", "csv", "epsteinZeta_Ref.csv");
         let mut rdr = csv::ReaderBuilder::new()
             .has_headers(false)
             .from_path(path)
             .unwrap();
+        let tol = 1.0e-13;
+        let mut failed = 0;
         for result in rdr.deserialize() {
-            let Record {
-                a,
-                x,
-                reference,
-                epsilon,
+            let ZetaRecord {
+                nu_real,
+                nu_imag: _nu_imag,
+                a1,
+                a2,
+                a3,
+                a4,
+                x1,
+                x2,
+                y1,
+                y2,
+                ref1,
+                ref2,
             } = result.unwrap();
-            // let computed = epstein_zeta(nu, a, x, y);
-            // assert_abs_diff_eq!(reference, computed, epsilon = epsilon);
+            let a = array!([a1, a2], [a3, a4]);
+            let x = array!(x1, x2);
+            let y = array!(y1, y2);
+            let zeta_computed = epstein_zeta(nu_real, &a, &x, &y);
+            let zeta_ref = c64(ref1, ref2);
+            let diff = zeta_ref - zeta_computed;
+            let error_abs = diff.abs();
+            let error_rel = error_abs / zeta_ref.abs();
+            let error = if error_abs > error_rel {
+                error_abs
+            } else {
+                error_rel
+            };
+            if error >= tol {
+                eprintln!(
+                    "FAIL ref: {:.16e} computed: {:.16e} error_abs: {:.16e} error_rel: {:.16e} tol: {:.16e}",
+                    zeta_ref.re, zeta_computed.re, error_abs, error_rel, tol
+                );
+                failed += 1;
+            } else {
+                println!(
+                    "PASS ref: {:.16e} computed: {:.16e} error_abs: {:.16e} error_rel: {:.16e} tol: {:.16e}",
+                    zeta_ref.re, zeta_computed.re, error_abs, error_rel, tol
+                );
+            }
+        }
+        if failed > 0 {
+            panic!();
         }
     }
 }
