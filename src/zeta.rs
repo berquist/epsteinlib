@@ -2,8 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use core::clone::Clone;
 use std::f64::consts;
 
+use libm::remainder;
 use ndarray::{Array1, Array2};
 use num_complex::{c64, Complex64};
 
@@ -132,12 +134,37 @@ fn sum_fourier(
 /// * @param[in] m: matrix that transforms the lattice in the function.
 /// * @param[in] m_invt: inverse of m.
 /// * @param[in] v: vector for which the projection to the elementary lattice cell
-/// * is needet.
+/// * is needed.
 /// * @return projection of v to the elementary lattice cell.
 fn vector_proj(m: &Array2<f64>, m_invt: &Array2<f64>, v: &Array1<f64>) -> Array1<f64> {
+    let dim = v.len();
     let mut todo = false;
-    let mut vt = Array1::zeros(v.len());
-    vt
+    let mut vt = Array1::<f64>::zeros(dim);
+    for i in 0..dim {
+        for j in 0..dim {
+            vt[i] += m_invt[(j, i)] * v[j];
+        }
+    }
+    // check if projection is needed, else return
+    let mut i = 0;
+    while i < dim && !todo {
+        todo = todo || (vt[i] <= -0.5 || vt[i] >= 0.5);
+        i += 1;
+    }
+    if todo {
+        for i in 0..dim {
+            vt[i] = remainder(vt[i], 1.0);
+        }
+        let mut vres = Array1::zeros(dim);
+        for i in 0..dim {
+            for j in 0..dim {
+                vres[i] += m[(i, j)] * vt[j]
+            }
+        }
+        vres
+    } else {
+        v.clone()
+    }
 }
 
 /// calculates the (regularized) Epstein Zeta function.
