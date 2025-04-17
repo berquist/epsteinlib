@@ -5,9 +5,9 @@
 use core::clone::Clone;
 use std::f64::consts;
 
-use libm::remainder;
+use libm::{fmax, ldexp, remainder};
 use ndarray::{Array1, Array2};
-use ndarray_linalg::Inverse;
+use ndarray_linalg::{Inverse, OperationNorm};
 use num_complex::{c64, Complex64};
 use num_traits::identities;
 
@@ -179,6 +179,9 @@ fn is_diagonal<T: PartialEq + identities::Zero>(m: &Array2<T>) -> bool {
     ret
 }
 
+/// Smallest value z such that G(nu, z) is negligible for nu < 10.
+const G_BOUND: f64 = 3.2;
+
 /// calculates the (regularized) Epstein Zeta function.
 ///
 /// * @param[in] nu: exponent for the Epstein zeta function.
@@ -198,13 +201,59 @@ fn epstein_zeta_internal(
     lambda: f64,
     reg: bool,
 ) -> Complex64 {
+    let dim = x.len();
     // 1. Transform: Compute determinant and fourier transformed matrix, scale
-    let m_copy = m.clone();
-    let m_real = m.clone();
-    let is_diagonal = is_diagonal(m);
-    let m_fourier = m.inv().unwrap();
     // both of them
-    c64(0.0, 0.0)
+    // let m_copy = m.clone();
+    let mut m_real = m.clone();
+    let is_diagonal = is_diagonal(m);
+    let mut m_fourier = m.inv().unwrap();
+    let vol = m.diag().product().abs();
+    let ms = vol.powi(-1 / dim as i32);
+    m_real *= ms;
+    m_fourier *= ms;
+    let x_t1 = x * ms;
+    let y_t1 = y / ms;
+    // 2. transform: get x and y in their respective elementary cells
+    let x_t2 = vector_proj(&m_real, &m_fourier, &x_t1);
+    let y_t2 = vector_proj(&m_fourier, &m_real, &y_t1);
+    // set cutoffs
+    let cutoff_id = G_BOUND + 0.5;
+    // If diagonal, choose absolute diag. entries for cutoff
+    // Else, choose cutoff depending on smallest and biggest abs eigenvalue
+    let cutoffs_real = if is_diagonal {
+        (cutoff_id / m_real.diag().abs()).floor()
+    } else {
+        let ev_abs_min_r = m_real.opnorm_inf().unwrap();
+        Array1::ones(m_real.diag().len()) * cutoff_id * ev_abs_min_r
+    };
+    let cutoffs_fourier = if is_diagonal {
+        (cutoff_id * m_real.diag().abs()).floor()
+    } else {
+        let ev_abs_max = m_fourier.opnorm_inf().unwrap();
+        Array1::ones(m_real.diag().len()) * cutoff_id * ev_abs_max
+    };
+    // handle special case of non-positive integer values nu.
+    let mut res = c64(0.0, 0.0);
+    /// epsilon for the cutoff around nu = dimension.
+    let EPS = ldexp(1.0, -30);
+    /// epsilon for the cutoff around x = 0 and y = 0
+    let EPS_ZERO_Y = 1.0e-64;
+    if nu < 1.0 && ((nu / 2.0) - (nu / 2.0).round_ties_even()).abs() < EPS {
+    } else if (nu - dim as f64).abs() < EPS && y_t2.dot(&y_t2) < EPS_ZERO_Y && !reg {
+    } else {
+    }
+    res *= ms.powf(nu);
+    // apply correction to matrix scaling if nu = d + 2k
+    let k = fmax(0.0, ((nu - dim as f64) / 2.0).round_ties_even());
+    if reg && (nu == (dim as f64 + 2.0 * k)) {
+        if k == 0.0 {
+            // res +=
+        } else {
+            let y_squared = y.pow2().sum();
+        }
+    }
+    res
 }
 
 /// calculates the Epstein zeta function.
