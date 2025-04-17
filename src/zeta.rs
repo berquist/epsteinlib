@@ -7,6 +7,7 @@ use std::f64::consts;
 
 use libm::remainder;
 use ndarray::{Array1, Array2};
+use ndarray_linalg::Inverse;
 use num_complex::{c64, Complex64};
 use num_traits::identities;
 
@@ -200,7 +201,8 @@ fn epstein_zeta_internal(
     // 1. Transform: Compute determinant and fourier transformed matrix, scale
     let m_copy = m.clone();
     let m_real = m.clone();
-    let is_diagonal = is_diagonal(&m);
+    let is_diagonal = is_diagonal(m);
+    let m_fourier = m.inv().unwrap();
     // both of them
     c64(0.0, 0.0)
 }
