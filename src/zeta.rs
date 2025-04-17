@@ -8,6 +8,7 @@ use std::f64::consts;
 use libm::remainder;
 use ndarray::{Array1, Array2};
 use num_complex::{c64, Complex64};
+use num_traits::identities;
 
 use crate::crandall;
 
@@ -167,6 +168,16 @@ fn vector_proj(m: &Array2<f64>, m_invt: &Array2<f64>, v: &Array1<f64>) -> Array1
     }
 }
 
+fn is_diagonal<T: PartialEq + identities::Zero>(m: &Array2<T>) -> bool {
+    let mut ret = true;
+    for i in 0..m.nrows() {
+        for j in 0..m.ncols() {
+            ret = ret && ((i == j) || (m[(i, j)] == T::zero()));
+        }
+    }
+    ret
+}
+
 /// calculates the (regularized) Epstein Zeta function.
 ///
 /// * @param[in] nu: exponent for the Epstein zeta function.
@@ -187,6 +198,9 @@ fn epstein_zeta_internal(
     reg: bool,
 ) -> Complex64 {
     // 1. Transform: Compute determinant and fourier transformed matrix, scale
+    let m_copy = m.clone();
+    let m_real = m.clone();
+    let is_diagonal = is_diagonal(&m);
     // both of them
     c64(0.0, 0.0)
 }
@@ -224,23 +238,24 @@ mod tests {
     use num_complex::ComplexFloat;
     use serde::Deserialize;
 
+    #[derive(Debug, Deserialize)]
+    struct ZetaRecord {
+        nu_real: f64,
+        nu_imag: f64,
+        a1: f64,
+        a2: f64,
+        a3: f64,
+        a4: f64,
+        x1: f64,
+        x2: f64,
+        y1: f64,
+        y2: f64,
+        ref1: f64,
+        ref2: f64,
+    }
+
     #[test]
     fn test_epstein_zeta() {
-        #[derive(Debug, Deserialize)]
-        struct ZetaRecord {
-            nu_real: f64,
-            nu_imag: f64,
-            a1: f64,
-            a2: f64,
-            a3: f64,
-            a4: f64,
-            x1: f64,
-            x2: f64,
-            y1: f64,
-            y2: f64,
-            ref1: f64,
-            ref2: f64,
-        }
         let path = path!("src", "tests", "csv", "epsteinZeta_Ref.csv");
         let mut rdr = csv::ReaderBuilder::new()
             .has_headers(false)
@@ -267,6 +282,61 @@ mod tests {
             let x = array!(x1, x2);
             let y = array!(y1, y2);
             let zeta_computed = epstein_zeta(nu_real, &a, &x, &y);
+            let zeta_ref = c64(ref1, ref2);
+            let diff = zeta_ref - zeta_computed;
+            let error_abs = diff.abs();
+            let error_rel = error_abs / zeta_ref.abs();
+            let error = if error_abs > error_rel {
+                error_abs
+            } else {
+                error_rel
+            };
+            if error >= tol {
+                eprintln!(
+                    "FAIL ref: {:.16e} computed: {:.16e} error_abs: {:.16e} error_rel: {:.16e} tol: {:.16e}",
+                    zeta_ref.re, zeta_computed.re, error_abs, error_rel, tol
+                );
+                failed += 1;
+            } else {
+                println!(
+                    "PASS ref: {:.16e} computed: {:.16e} error_abs: {:.16e} error_rel: {:.16e} tol: {:.16e}",
+                    zeta_ref.re, zeta_computed.re, error_abs, error_rel, tol
+                );
+            }
+        }
+        if failed > 0 {
+            panic!();
+        }
+    }
+
+    #[test]
+    fn test_epstein_zeta_reg() {
+        let path = path!("src", "tests", "csv", "epsteinZetaReg_Ref.csv");
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(path)
+            .unwrap();
+        let tol = 1.0e-13;
+        let mut failed = 0;
+        for result in rdr.deserialize() {
+            let ZetaRecord {
+                nu_real,
+                nu_imag: _nu_imag,
+                a1,
+                a2,
+                a3,
+                a4,
+                x1,
+                x2,
+                y1,
+                y2,
+                ref1,
+                ref2,
+            } = result.unwrap();
+            let a = array!([a1, a2], [a3, a4]);
+            let x = array!(x1, x2);
+            let y = array!(y1, y2);
+            let zeta_computed = epstein_zeta_reg(nu_real, &a, &x, &y);
             let zeta_ref = c64(ref1, ref2);
             let diff = zeta_ref - zeta_computed;
             let error_abs = diff.abs();
