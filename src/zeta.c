@@ -162,7 +162,7 @@ double complex sum_fourier(double nu, unsigned int dim, double lambda,
  * @param[in] m: matrix that transforms the lattice in the function.
  * @param[in] m_invt: inverse of m.
  * @param[in] v: vector for which the projection to the elementary lattice cell
- * is needet.
+ * is needed.
  * @return projection of v to the elementary lattice cell.
  */
 double *vectorProj(unsigned int dim, const double *m, const double *m_invt,
