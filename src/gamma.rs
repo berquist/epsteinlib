@@ -9,7 +9,7 @@
 //! * @see Walter Gautschi. “A Computational Procedure for Incomplete Gamma
 //! Func-257 tions”. In: ACM Trans. Math. Softw. 5 (1979), pp.  466–481
 
-use std::f64::consts;
+use core::f64::consts;
 
 use libm::ldexp;
 use special::{Gamma, Primitive};

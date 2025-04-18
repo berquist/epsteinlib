@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use std::f64::consts;
+use core::f64::consts;
 
 use ndarray::Array1;
 use num_complex::{c64, Complex64};
@@ -24,7 +24,7 @@ const EPS_ZERO_PIY: f64 = consts::PI * 1.0e-64;
 /// * @return arg ** (- s / 2) * (gamma(s / 2, arg) + ((-1)^k / k! ) * (log(arg) -
 /// * log(lambda ** 2))
 fn crandall_gReg_nuequalsdimplus2k(s: f64, arg: f64, k: f64, lambda: f64) -> Complex64 {
-    let mut gReg = 0.0;
+    let mut g_reg = 0.0;
     let taylor_cutoff = 0.1 * 0.1 * consts::PI;
     // Taylor expansion if nu = dim and y close to zero.
     if s == 0.0 && arg < taylor_cutoff {
@@ -42,17 +42,17 @@ fn crandall_gReg_nuequalsdimplus2k(s: f64, arg: f64, k: f64, lambda: f64) -> Com
             3.0619243582206544e-7,
         ];
         for i in 0..taylor_coeffs.len() {
-            gReg += taylor_coeffs[i] * arg.powi(i as i32);
+            g_reg += taylor_coeffs[i] * arg.powi(i as i32);
         }
     } else if arg == 0.0 {
-        gReg = 1.0 / k;
+        g_reg = 1.0 / k;
     } else {
-        gReg = arg.powf(k)
+        g_reg = arg.powf(k)
             * (egf_ugamma(-k, arg) + ((-1.0_f64).powf(k) / Gamma::gamma(k + 1.0)) * arg.log2());
     }
     // subtract polynomial of order k due to free parameter lambda
-    gReg -= arg.powf(k) * (lambda * lambda).log2();
-    c64(gReg, 0.0)
+    g_reg -= arg.powf(k) * (lambda * lambda).log2();
+    c64(g_reg, 0.0)
 }
 
 /// Calculates the regularization of the zero summand in the second sum in
@@ -68,7 +68,7 @@ fn crandall_gReg_nuequalsdimplus2k(s: f64, arg: f64, k: f64, lambda: f64) -> Com
 /// * not equal to - 2k and (pi * prefactor * y ** 2) ** (- s / 2)
 /// * (gamma(s / 2, pi * prefactor * z ** 2) + ((-1)^k / k! ) * (log(pi * y ** 2) -
 /// * log(prefactor ** 2))) if s is  equal to - 2k for non negative natural number k
-fn crandall_gReg(s: f64, z: &Array1<f64>, prefactor: f64) -> Complex64 {
+pub(crate) fn crandall_gReg(s: f64, z: &Array1<f64>, prefactor: f64) -> Complex64 {
     let z_argument = z.dot(z) * consts::PI * prefactor * prefactor;
     let k = -(s / 2.0).round_ties_even();
     if s < 1.0 && (s == -2.0 * k) {
@@ -87,7 +87,7 @@ fn crandall_gReg(s: f64, z: &Array1<f64>, prefactor: f64) -> Complex64 {
 /// * @param[in] nu: exponent of the regularized Epstein zeta function.
 /// * @return minimum value of z, when to use the fast asymptotic expansion in the
 /// * calculation of the incomplete upper gamma function upperGamma(nu, z).
-fn assign_z_arg_bound(nu: f64) -> f64 {
+pub(crate) fn assign_z_arg_bound(nu: f64) -> f64 {
     if nu > 1.6 && nu < 4.4 {
         consts::PI * 2.99 * 2.99
     } else if nu > -3.0 && nu < 8.0 {

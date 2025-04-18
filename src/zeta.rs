@@ -2,8 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use core::clone::Clone;
-use std::f64::consts;
+use core::{clone::Clone, f64::consts};
 
 use libm::{fmax, ldexp, remainder};
 use ndarray::{Array1, Array2};
@@ -239,14 +238,72 @@ fn epstein_zeta_internal(
     let EPS = ldexp(1.0, -30);
     /// epsilon for the cutoff around x = 0 and y = 0
     let EPS_ZERO_Y = 1.0e-64;
+    let dimf = dim as f64;
     if nu < 1.0 && ((nu / 2.0) - (nu / 2.0).round_ties_even()).abs() < EPS {
-    } else if (nu - dim as f64).abs() < EPS && y_t2.dot(&y_t2) < EPS_ZERO_Y && !reg {
+        res = -c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t2)).exp();
+    } else if (nu - dimf).abs() < EPS && y_t2.dot(&y_t2) < EPS_ZERO_Y && !reg {
+        res = c64(0.0, 0.0);
     } else {
+        let z_arg_bound = crandall::assign_z_arg_bound(nu);
+        let vx = x_t1 - x_t2;
+        let mut xfactor = c64(0.0, -2.0 * consts::PI * vx.dot(&y_t1)).exp();
+        if reg {
+            let nc = crandall::crandall_gReg(dimf - nu, &y_t1, lambda);
+            let rot = c64(0.0, 2.0 * consts::PI * x_t1.dot(&y_t1));
+            let mut s2 = sum_fourier(
+                nu,
+                lambda,
+                &m_fourier,
+                &x_t1,
+                &y_t2,
+                &cutoffs_fourier,
+                z_arg_bound,
+            );
+            if y_t1 != y_t2 {
+                s2 += crandall::crandall_g(dimf - nu, &y_t2, lambda, z_arg_bound)
+                    * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t2))
+                    - crandall::crandall_g(dimf - nu, &y_t1, lambda, z_arg_bound)
+                        * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t1));
+            }
+            s2 *= rot + nc;
+            let s1 = sum_real(
+                nu,
+                lambda,
+                &m_real,
+                &x_t2,
+                &y_t2,
+                &cutoffs_real,
+                z_arg_bound,
+            ) * rot
+                * xfactor;
+            xfactor = c64(1.0, 1.0);
+        } else {
+            let nc = crandall::crandall_g(dimf - nu, &y_t2, lambda, z_arg_bound);
+            let s1 = sum_real(
+                nu,
+                lambda,
+                &m_real,
+                &x_t2,
+                &y_t2,
+                &cutoffs_real,
+                z_arg_bound,
+            );
+            let s2 = sum_fourier(
+                nu,
+                lambda,
+                &m_fourier,
+                &x_t2,
+                &y_t2,
+                &cutoffs_fourier,
+                z_arg_bound,
+            ) + nc;
+        }
+        // res = xfactor * (lambda * lambda / consts::PI).
     }
     res *= ms.powf(nu);
     // apply correction to matrix scaling if nu = d + 2k
-    let k = fmax(0.0, ((nu - dim as f64) / 2.0).round_ties_even());
-    if reg && (nu == (dim as f64 + 2.0 * k)) {
+    let k = fmax(0.0, ((nu - dimf) / 2.0).round_ties_even());
+    if reg && (nu == (dimf + 2.0 * k)) {
         if k == 0.0 {
             // res +=
         } else {
