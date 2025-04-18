@@ -217,7 +217,6 @@ double complex epsteinZetaInternal(double nu, unsigned int dim, // NOLINT
     // 1. Transform: Compute determinant and fourier transformed matrix, scale
     // both of them
     double m_fourier[dim * dim];
-    double m_copy[dim * dim];
     double m_real[dim * dim];
     double x_t1[dim];
     double y_t1[dim];
@@ -225,15 +224,14 @@ double complex epsteinZetaInternal(double nu, unsigned int dim, // NOLINT
     bool isDiagonal = 1;
     for (int i = 0; i < dim; i++) {
         for (int j = 0; j < dim; j++) {
-            m_copy[(dim * i) + j] = m[(dim * i) + j];
             m_real[(dim * i) + j] = m[(dim * i) + j];
             isDiagonal = isDiagonal && ((i == j) || (m[(dim * i) + j] == 0));
         }
     }
-    invert(dim, m_copy, p, m_fourier);
+    invert(dim, m_real, p, m_fourier);
     double vol = 1;
     for (int k = 0; k < dim; k++) {
-        vol *= m_copy[(dim * k) + k];
+        vol *= m_real[(dim * k) + k];
     }
     transpose(dim, m_fourier);
     vol = fabs(vol);
