@@ -9,6 +9,7 @@ use ndarray::{Array1, Array2};
 use ndarray_linalg::{Inverse, OperationNorm};
 use num_complex::{c64, Complex64};
 use num_traits::identities;
+use special::Gamma;
 
 use crate::crandall;
 
@@ -34,16 +35,16 @@ fn sum_real(
     m: &Array2<f64>,
     x: &Array1<f64>,
     y: &Array1<f64>,
-    cutoffs: &[usize],
+    cutoffs: &Array1<isize>,
     z_arg_bound: f64,
 ) -> Complex64 {
     let dim = m.ncols();
     let mut zv = Array1::default(dim);
     // cuboid cutoffs
     let mut total_summands = 1;
-    let mut total_cutoffs = Vec::new();
+    let mut total_cutoffs = Array1::zeros(dim);
     for k in 0..dim {
-        total_cutoffs.push(total_summands);
+        total_cutoffs[k] = total_summands;
         total_summands *= 2 * cutoffs[k] + 1;
     }
     let mut sum = c64(0.0, 0.0);
@@ -51,16 +52,22 @@ fn sum_real(
     // First Sum (in real space)
     for n in 0..total_summands {
         for k in 0..dim {
-            zv[k] = (((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k]) as f64;
+            zv[k] = ((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k];
         }
-        let mut lv = m.dot(&zv);
-        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(y));
+        // println!("zv {:?}", zv);
+        let zvf = zv.mapv(|elem| elem as f64);
+        let mut lv = m.dot(&zvf);
+        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(y)).exp();
         lv -= x;
         // summing using Kahan's method
         let auxy = rot * crandall::crandall_g(nu, &lv, 1.0 / lambda, z_arg_bound) - epsilon;
         let auxt = sum + auxy;
         epsilon = (auxt - sum) - auxy;
         sum = auxt;
+        // println!(
+        //     "{} rot {:?} auxy {:?} auxt {:?} epsilon {:?}",
+        //     n, rot, auxy, auxt, epsilon
+        // );
     }
     sum
 }
@@ -86,7 +93,7 @@ fn sum_fourier(
     m_invt: &Array2<f64>,
     x: &Array1<f64>,
     y: &Array1<f64>,
-    cutoffs: &[usize],
+    cutoffs: &Array1<isize>,
     z_arg_bound: f64,
 ) -> Complex64 {
     let dim = y.len();
@@ -104,9 +111,10 @@ fn sum_fourier(
     // second sum (in fourier space)
     for n in 0..zero_index {
         for k in 0..dim {
-            zv[k] = (((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k]) as f64;
+            zv[k] = ((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k];
         }
-        let lv = m_invt.dot(&zv) + y;
+        let zvf = zv.mapv(|elem| elem as f64);
+        let lv = m_invt.dot(&zvf) + y;
         let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x));
         let auxy = rot * crandall::crandall_g(dim as f64 - nu, &lv, lambda, z_arg_bound) - epsilon;
         let auxt = sum + auxy;
@@ -117,9 +125,10 @@ fn sum_fourier(
     // TODO this is all just the above; make a function of n
     for n in zero_index + 1..total_summands {
         for k in 0..dim {
-            zv[k] = (((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k]) as f64;
+            zv[k] = ((n / total_cutoffs[k]) % (2 * cutoffs[k] + 1)) - cutoffs[k];
         }
-        let lv = m_invt.dot(&zv) + y;
+        let zvf = zv.mapv(|elem| elem as f64);
+        let lv = m_invt.dot(&zvf) + y;
         let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x));
         let auxy = rot * crandall::crandall_g(dim as f64 - nu, &lv, lambda, z_arg_bound) - epsilon;
         let auxt = sum + auxy;
@@ -203,7 +212,6 @@ fn epstein_zeta_internal(
     let dim = x.len();
     // 1. Transform: Compute determinant and fourier transformed matrix, scale
     // both of them
-    // let m_copy = m.clone();
     let mut m_real = m.clone();
     let is_diagonal = is_diagonal(m);
     let mut m_fourier = m.inv().unwrap();
@@ -232,6 +240,8 @@ fn epstein_zeta_internal(
         let ev_abs_max = m_fourier.opnorm_inf().unwrap();
         Array1::ones(m_real.diag().len()) * cutoff_id * ev_abs_max
     };
+    let cutoffs_u_real = cutoffs_real.mapv(|elem| elem as isize);
+    let cutoffs_u_fourier = cutoffs_fourier.mapv(|elem| elem as isize);
     // handle special case of non-positive integer values nu.
     let mut res = c64(0.0, 0.0);
     /// epsilon for the cutoff around nu = dimension.
@@ -245,20 +255,23 @@ fn epstein_zeta_internal(
         res = c64(0.0, 0.0);
     } else {
         let z_arg_bound = crandall::assign_z_arg_bound(nu);
-        let vx = x_t1 - x_t2;
+        let vx = x_t1.clone() - x_t2.clone();
         let mut xfactor = c64(0.0, -2.0 * consts::PI * vx.dot(&y_t1)).exp();
+        let s1: Complex64;
+        let mut s2: Complex64;
         if reg {
             let nc = crandall::crandall_gReg(dimf - nu, &y_t1, lambda);
             let rot = c64(0.0, 2.0 * consts::PI * x_t1.dot(&y_t1));
-            let mut s2 = sum_fourier(
+            s2 = sum_fourier(
                 nu,
                 lambda,
                 &m_fourier,
                 &x_t1,
                 &y_t2,
-                &cutoffs_fourier,
+                &cutoffs_u_fourier,
                 z_arg_bound,
             );
+            // correct wrong zero summand in regularized fourier sum.
             if y_t1 != y_t2 {
                 s2 += crandall::crandall_g(dimf - nu, &y_t2, lambda, z_arg_bound)
                     * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t2))
@@ -266,48 +279,55 @@ fn epstein_zeta_internal(
                         * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t1));
             }
             s2 *= rot + nc;
-            let s1 = sum_real(
+            s1 = sum_real(
                 nu,
                 lambda,
                 &m_real,
                 &x_t2,
                 &y_t2,
-                &cutoffs_real,
+                &cutoffs_u_real,
                 z_arg_bound,
             ) * rot
                 * xfactor;
             xfactor = c64(1.0, 1.0);
         } else {
             let nc = crandall::crandall_g(dimf - nu, &y_t2, lambda, z_arg_bound);
-            let s1 = sum_real(
+            s1 = sum_real(
                 nu,
                 lambda,
                 &m_real,
                 &x_t2,
                 &y_t2,
-                &cutoffs_real,
+                &cutoffs_u_real,
                 z_arg_bound,
             );
-            let s2 = sum_fourier(
+            s2 = sum_fourier(
                 nu,
                 lambda,
                 &m_fourier,
                 &x_t2,
                 &y_t2,
-                &cutoffs_fourier,
+                &cutoffs_u_fourier,
                 z_arg_bound,
             ) + nc;
         }
-        // res = xfactor * (lambda * lambda / consts::PI).
+        res = xfactor * (lambda * lambda / consts::PI).powf(-nu / 2.0) / Gamma::gamma(nu / 2.0)
+            * (s1 + lambda.powf(dimf) * s2);
     }
     res *= ms.powf(nu);
     // apply correction to matrix scaling if nu = d + 2k
     let k = fmax(0.0, ((nu - dimf) / 2.0).round_ties_even());
     if reg && (nu == (dimf + 2.0 * k)) {
         if k == 0.0 {
-            // res +=
+            res += consts::PI.powf(dimf / 2.0) / Gamma::gamma(dimf / 2.0) * (ms * ms).ln() / vol;
         } else {
             let y_squared = y.pow2().sum();
+            res -= consts::PI.powf((2.0 + k) + (dimf / 2.0)) / Gamma::gamma(k + (dimf / 2.0))
+                * (-1.0_f64).powf(k + 1.0)
+                / Gamma::gamma(k + 1.0)
+                * y_squared.powf(k)
+                * (ms * ms).ln()
+                / vol;
         }
     }
     res
@@ -341,10 +361,41 @@ pub fn epstein_zeta_reg(nu: f64, a: &Array2<f64>, x: &Array1<f64>, y: &Array1<f6
 mod tests {
     use super::*;
 
+    // use approx::assert_abs_diff_eq;
     use manifest_dir_macros::path;
     use ndarray::array;
     use num_complex::ComplexFloat;
     use serde::Deserialize;
+
+    #[test]
+    fn test_sum_real() {
+        let nu = 9.1366273707310508e-01;
+        let lambda = 1.0;
+        let z_arg_bound = 3.1172453105244717e+01;
+        let m = array!([1.1547005383792517e+00, 0.0], [0.0, 8.6602540378443860e-01]);
+        let x = array!(-1.1033540377972531e-01, 1.0725221992945301e-02);
+        let y = array!(-8.6000420863103680e-02, 8.2532598838252230e-02);
+        let cutoffs = array!(3, 4);
+        let computed = sum_real(nu, lambda, &m, &x, &y, &cutoffs, z_arg_bound);
+        let reference = c64(6.4776111947062631e+00, -6.9161715507768205e-03);
+        let tolerance = 1.0e-15;
+        // assert_abs_diff_eq!(reference.re, computed.re, epsilon = epsilon);
+        // assert_abs_diff_eq!(reference.im, computed.im, epsilon = epsilon);
+        let diff = reference - computed;
+        let error_abs = diff.abs();
+        let error_rel = error_abs / reference.abs();
+        let error = if error_abs > error_rel {
+            error_abs
+        } else {
+            error_rel
+        };
+        if error > tolerance {
+            panic!();
+        }
+    }
+
+    #[test]
+    fn test_sum_fourier() {}
 
     #[derive(Debug, Deserialize)]
     struct ZetaRecord {

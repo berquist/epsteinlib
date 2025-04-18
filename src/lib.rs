@@ -5,4 +5,4 @@
 mod crandall;
 mod gamma;
 mod tools;
-mod zeta;
+pub mod zeta;
