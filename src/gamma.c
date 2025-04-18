@@ -42,22 +42,24 @@ enum dom egf_domain(double a, double x) {
     } else {
         alpha = log(0.5) / log(0.5 * x);
     }
+    enum dom ret;
     if (a <= alpha) {
         if (x <= 1.5 && a >= -0.5) {
-            return qt;
+            ret = qt;
+        } else if (x <= 1.5) {
+            ret = rek;
+        } else if (a >= 12 && a >= x / 2.35) {
+            ret = ua;
+        } else {
+            ret = cf;
         }
-        if (x <= 1.5) {
-            return rek;
-        }
-        if (a >= 12 && a >= x / 2.35) {
-            return ua;
-        }
-        return cf;
+    } else if (a >= 12 && x >= 0.3 * a) {
+        ret = ua;
+    } else {
+        ret = pt;
     }
-    if (a >= 12 && x >= 0.3 * a) {
-        return ua;
-    }
-    return pt;
+    /* printf("assert_eq!(egf_domain(%.16le, %.16le), %d);\n", a, x, ret); */
+    return ret;
 }
 
 enum dom egf_ldomain(double a, double x) {
@@ -67,22 +69,24 @@ enum dom egf_ldomain(double a, double x) {
     } else {
         alpha = log(0.5) / log(0.5 * x);
     }
+    enum dom ret;
     if (a <= alpha) {
         if (x <= 1.5 && (a >= -0.5 || (a >= -0.75 && x <= ldexp(2, -15)))) {
-            return pt;
+            ret = pt;
+        } else if (x <= 1.5) {
+            ret = rek;
+        } else if (a >= 12 && a >= x / 2.35) {
+            ret = ua;
+        } else {
+            ret = cf;
         }
-        if (x <= 1.5) {
-            return rek;
-        }
-        if (a >= 12 && a >= x / 2.35) {
-            return ua;
-        }
-        return cf;
+    } else if (a >= 12 && x >= 0.3 * a) {
+        ret = ua;
+    } else {
+        ret = pt;
     }
-    if (a >= 12 && x >= 0.3 * a) {
-        return ua;
-    }
-    return pt;
+    /* printf("assert_eq!(egf_ldomain(%.16le, %.16le), %d);\n", a, x, ret); */
+    return ret;
 }
 
 /**
@@ -99,7 +103,9 @@ double egf_pt(double a, double x) {
         sn += add;
         add *= (x / (a + i + 1));
     }
-    return sn * exp(-x) / tgamma(a + 1);
+    double ret = sn * exp(-x) / tgamma(a + 1);
+    /* printf("egf_pt,%.16le,%.16le,%.16le,1.0e-16\n", a, x, ret); */
+    return ret;
 }
 
 /**
@@ -152,7 +158,9 @@ double egf_qt(double a, double x) {
         v += f / (double)(a + i);
     }
     v *= -pow(x, a);
-    return u + v;
+    double ret = u + v;
+    /* printf("egf_qt,%.16le,%.16le,%.16le,1.0e-16\n", a, x, ret); */
+    return ret;
 }
 
 /**
@@ -168,6 +176,7 @@ double egf_rek(double a, double x) {
     for (int n = 1; n <= m; n++) {
         g = 1. / (n - epsilon) * (1. - x * g);
     }
+    /* printf("egf_rek,%.16le,%.16le,%.16le,1.0e-16\n", a, x, g); */
     return g;
 }
 
@@ -188,6 +197,7 @@ double egf_cf(double a, double x) {
         s += rp;
     }
     double r = s * pow(x, a) * exp(-x) / (x + 1 - a);
+    /* printf("egf_cf,%.16le,%.16le,%.16le,1.0e-16\n", a, x, r); */
     return r;
 }
 
@@ -238,7 +248,9 @@ double egf_ua_r(double a, double eta) {
         f *= eta;
     }
     s *= a / (a + beta[1]);
-    return s * exp(-0.5 * a * eta * eta) / sqrt(2 * M_PI * a);
+    double ret = s * exp(-0.5 * a * eta * eta) / sqrt(2 * M_PI * a);
+    /* printf("egf_ua_r,%.16le,%.16le,%.16le,1.0e-16\n", a, eta, ret); */
+    return ret;
 }
 
 /**
@@ -254,7 +266,9 @@ double egf_ua(double a, double x) {
         eta = -eta;
     }
     double ra = egf_ua_r(a, eta);
-    return (0.5 * erfc(eta * sqrt(a / 2.))) + ra;
+    double ret = (0.5 * erfc(eta * sqrt(a / 2.))) + ra;
+    /* printf("egf_ua,%.16le,%.16le,%.16le,1.0e-16\n", a, x, ret); */
+    return ret;
 }
 
 /**
@@ -283,6 +297,7 @@ double egf_ugamma(double a, double x) {
         r = exp(-x) * pow(x, a) * egf_rek(a, x);
         break;
     }
+    /* printf("egf_ugamma,%.16le,%.16le,%.16le,1.0e-16\n", a, x, r); */
     return r;
 }
 
@@ -324,6 +339,7 @@ double egf_gammaStar(double a, double x) {
         }
         break;
     }
+    /* printf("egf_gammaStar,%.16le,%.16le,%.16le,1.0e-16\n", a, x, r); */
     return r;
 }
 #undef EGF_EPS
