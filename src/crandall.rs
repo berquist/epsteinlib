@@ -23,7 +23,7 @@ const EPS_ZERO_PIY: f64 = consts::PI * 1.0e-64;
 /// * @param[in] lambda: scaling parameter of crandalls formula
 /// * @return arg ** (- s / 2) * (gamma(s / 2, arg) + ((-1)^k / k! ) * (log(arg) -
 /// * log(lambda ** 2))
-fn crandall_gReg_nuequalsdimplus2k(s: f64, arg: f64, k: f64, lambda: f64) -> Complex64 {
+fn crandall_g_reg_nuequalsdimplus2k(s: f64, arg: f64, k: f64, lambda: f64) -> Complex64 {
     let mut g_reg = 0.0;
     let taylor_cutoff = 0.1 * 0.1 * consts::PI;
     // Taylor expansion if nu = dim and y close to zero.
@@ -68,11 +68,11 @@ fn crandall_gReg_nuequalsdimplus2k(s: f64, arg: f64, k: f64, lambda: f64) -> Com
 /// * not equal to - 2k and (pi * prefactor * y ** 2) ** (- s / 2)
 /// * (gamma(s / 2, pi * prefactor * z ** 2) + ((-1)^k / k! ) * (log(pi * y ** 2) -
 /// * log(prefactor ** 2))) if s is  equal to - 2k for non negative natural number k
-pub(crate) fn crandall_gReg(s: f64, z: &Array1<f64>, prefactor: f64) -> Complex64 {
+pub(crate) fn crandall_g_reg(s: f64, z: &Array1<f64>, prefactor: f64) -> Complex64 {
     let z_argument = z.dot(z) * consts::PI * prefactor * prefactor;
     let k = -(s / 2.0).round_ties_even();
     if s < 1.0 && (s == -2.0 * k) {
-        crandall_gReg_nuequalsdimplus2k(s, z_argument, k, prefactor)
+        crandall_g_reg_nuequalsdimplus2k(s, z_argument, k, prefactor)
     } else {
         c64(
             -Gamma::gamma(s / 2.0) * egf_gamma_star(s / 2.0, z_argument),

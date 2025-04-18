@@ -260,7 +260,7 @@ fn epstein_zeta_internal(
         let s1: Complex64;
         let mut s2: Complex64;
         if reg {
-            let nc = crandall::crandall_gReg(dimf - nu, &y_t1, lambda);
+            let nc = crandall::crandall_g_reg(dimf - nu, &y_t1, lambda);
             let rot = c64(0.0, 2.0 * consts::PI * x_t1.dot(&y_t1));
             s2 = sum_fourier(
                 nu,
