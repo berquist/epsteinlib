@@ -60,7 +60,7 @@ double complex sum_real(double nu, unsigned int dim, double lambda, const double
     // cuboid cutoffs
     long totalSummands = 1;
     long totalCutoffs[dim + 1];
-    for (int k = 0; k < dim; k++) {
+    for (unsigned int k = 0; k < dim; k++) {
         totalCutoffs[k] = totalSummands;
         totalSummands *= 2 * cutoffs[k] + 1;
     }
@@ -70,13 +70,13 @@ double complex sum_real(double nu, unsigned int dim, double lambda, const double
     double complex auxy;
     // First Sum (in real space)
     for (long n = 0; n < totalSummands; n++) {
-        for (int k = 0; k < dim; k++) {
+        for (unsigned int k = 0; k < dim; k++) {
             zv[k] =
                 (((int)(n / totalCutoffs[k])) % (2 * cutoffs[k] + 1)) - cutoffs[k];
         }
         matrix_intVector(dim, m, zv, lv);
         double complex rot = cexp(-2 * M_PI * I * dot(dim, lv, y));
-        for (int i = 0; i < dim; i++) {
+        for (unsigned int i = 0; i < dim; i++) {
             lv[i] = lv[i] - x[i];
         }
         // summing using Kahan's method
@@ -123,12 +123,12 @@ double complex sum_fourier(double nu, unsigned int dim, double lambda,
     double complex auxy;
     // second sum (in fourier space)
     for (long n = 0; n < zeroIndex; n++) {
-        for (int k = 0; k < dim; k++) {
+        for (unsigned int k = 0; k < dim; k++) {
             zv[k] =
                 (((int)(n / totalCutoffs[k])) % (2 * cutoffs[k] + 1)) - cutoffs[k];
         }
         matrix_intVector(dim, m_invt, zv, lv);
-        for (int i = 0; i < dim; i++) {
+        for (unsigned int i = 0; i < dim; i++) {
             lv[i] = lv[i] + y[i];
         }
         double complex rot = cexp(-2 * M_PI * I * dot(dim, lv, x));
@@ -139,7 +139,7 @@ double complex sum_fourier(double nu, unsigned int dim, double lambda,
     }
     // skips zero
     for (long n = zeroIndex + 1; n < totalSummands; n++) {
-        for (int k = 0; k < dim; k++) {
+        for (unsigned int k = 0; k < dim; k++) {
             zv[k] =
                 (((int)(n / totalCutoffs[k])) % (2 * cutoffs[k] + 1)) - cutoffs[k];
         }
