@@ -83,7 +83,7 @@ bool equals(unsigned int dim, const double *v1, const double *v2) {
 /**
  * @brief Invert matrix.
  * @param[in] dim: dimension of the vectors.
- * @param[in, out] m: matrix to invert. overwritten bei LU-decomposition.
+ * @param[in, out] m: matrix to invert. overwritten by LU decomposition.
  * @param[out] p: permutation vector.
  * @param[out] r: where inverse matrix is stored.
  */

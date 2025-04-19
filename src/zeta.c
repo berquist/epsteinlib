@@ -252,7 +252,7 @@ double complex epsteinZetaInternal(double nu, unsigned int dim, // NOLINT
     int cutoffsFourier[dim];
     double cutoff_id = G_BOUND + 0.5;
     if (isDiagonal) {
-        // Chose absolute diag. entries for cutoff
+        // Choose absolute diag. entries for cutoff
         for (int k = 0; k < dim; k++) {
             cutoffsReal[k] = floor(cutoff_id / fabs(m_real[(dim * k) + k]));
             cutoffsFourier[k] = floor(cutoff_id * fabs(m_real[(dim * k) + k]));
