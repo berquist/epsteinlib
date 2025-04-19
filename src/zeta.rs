@@ -115,7 +115,7 @@ fn sum_fourier(
         }
         let zvf = zv.mapv(|elem| elem as f64);
         let lv = m_invt.dot(&zvf) + y;
-        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x));
+        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x)).exp();
         let auxy = rot * crandall::crandall_g(dim as f64 - nu, &lv, lambda, z_arg_bound) - epsilon;
         let auxt = sum + auxy;
         epsilon = (auxt - sum) - auxy;
@@ -129,7 +129,7 @@ fn sum_fourier(
         }
         let zvf = zv.mapv(|elem| elem as f64);
         let lv = m_invt.dot(&zvf) + y;
-        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x));
+        let rot = c64(0.0, -2.0 * consts::PI * lv.dot(x)).exp();
         let auxy = rot * crandall::crandall_g(dim as f64 - nu, &lv, lambda, z_arg_bound) - epsilon;
         let auxt = sum + auxy;
         epsilon = (auxt - sum) - auxy;
@@ -243,7 +243,7 @@ fn epstein_zeta_internal(
     let cutoffs_u_real = cutoffs_real.mapv(|elem| elem as isize);
     let cutoffs_u_fourier = cutoffs_fourier.mapv(|elem| elem as isize);
     // handle special case of non-positive integer values nu.
-    let mut res = c64(0.0, 0.0);
+    let mut res: Complex64;
     /// epsilon for the cutoff around nu = dimension.
     let EPS = ldexp(1.0, -30);
     /// epsilon for the cutoff around x = 0 and y = 0
@@ -261,7 +261,7 @@ fn epstein_zeta_internal(
         let mut s2: Complex64;
         if reg {
             let nc = crandall::crandall_g_reg(dimf - nu, &y_t1, lambda);
-            let rot = c64(0.0, 2.0 * consts::PI * x_t1.dot(&y_t1));
+            let rot = c64(0.0, 2.0 * consts::PI * x_t1.dot(&y_t1)).exp();
             s2 = sum_fourier(
                 nu,
                 lambda,
