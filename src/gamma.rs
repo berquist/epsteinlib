@@ -10,6 +10,7 @@
 //! Func-257 tions”. In: ACM Trans. Math. Softw. 5 (1979), pp.  466–481
 
 use core::f64::consts;
+use std::sync::LazyLock;
 
 use libm::ldexp;
 use special::{Gamma, Primitive};
@@ -75,6 +76,9 @@ fn egf_ldomain(a: f64, x: f64) -> Dom {
     }
 }
 
+/// Epsilon for cutoff around integers.
+static EGF_EPS: LazyLock<f64> = LazyLock::new(|| ldexp(1.0, -54));
+
 /// calculate upper gamma function with the recursion formula.
 ///
 /// * @param[in] a: exponent of the upper incomplete gamma function.
@@ -84,8 +88,7 @@ fn egf_pt(a: f64, x: f64) -> f64 {
     let mut sn = 1.0;
     let mut add = x / (a + 1.0);
     let mut i = 1;
-    let EGF_EPS = ldexp(1.0, -54);
-    while i < 80 && (add / sn).abs() >= EGF_EPS {
+    while i < 80 && (add / sn).abs() >= *EGF_EPS {
         sn += add;
         add *= x / (a + f64::from(i) + 1.0);
         i += 1;
@@ -180,11 +183,9 @@ fn egf_cf(a: f64, x: f64) -> f64 {
     let mut rp = 1.0; // t_k-1
     let mut rv = 0.0; // rho_0
     let mut k = 1;
-    // TODO
-    let EGF_EPS = ldexp(1.0, -54);
     let bound = rp / s;
     let bound = (bound as f64).abs();
-    while k <= 200 && bound >= EGF_EPS {
+    while k <= 200 && bound >= *EGF_EPS {
         let fk = f64::from(k);
         let ak = fk * (a - fk) / ((x + 2.0 * fk - 1.0 - a) * (x + 2.0 * fk + 1.0 - a));
         rv = -ak * (1.0 + rv) / (1.0 + ak * (1.0 + rv));
@@ -282,9 +283,8 @@ pub(crate) fn egf_ugamma(a: f64, x: f64) -> f64 {
 /// * @param x: lower integral boundary of the upper incomplete gamma function.
 /// * @return function value of the upper incomplete gamma function.
 pub(crate) fn egf_gamma_star(a: f64, x: f64) -> f64 {
-    let EGF_EPS = ldexp(1.0, -54);
-    if x.abs() < EGF_EPS {
-        if a <= 0.1 && (a - a.round_ties_even()).abs() < EGF_EPS {
+    if x.abs() < *EGF_EPS {
+        if a <= 0.1 && (a - a.round_ties_even()).abs() < *EGF_EPS {
             0.0
         } else {
             1.0 / Gamma::gamma(a + 1.0)
@@ -294,7 +294,7 @@ pub(crate) fn egf_gamma_star(a: f64, x: f64) -> f64 {
             Dom::Pt => egf_pt(a, x),
             Dom::Qt => egf_pt(a, x),
             Dom::Cf => {
-                if a <= 0.1 && (a - a.round_ties_even()).abs() < EGF_EPS {
+                if a <= 0.1 && (a - a.round_ties_even()).abs() < *EGF_EPS {
                     x.powf(-a)
                 } else {
                     (1.0 - egf_cf(a, x) / Gamma::gamma(a)) * x.powf(-a)
@@ -302,7 +302,7 @@ pub(crate) fn egf_gamma_star(a: f64, x: f64) -> f64 {
             }
             Dom::Ua => (1.0 - egf_ua(a, x)) * x.powf(-a),
             Dom::Rek => {
-                if a <= 0.1 && (a - a.round_ties_even()).abs() < EGF_EPS {
+                if a <= 0.1 && (a - a.round_ties_even()).abs() < *EGF_EPS {
                     x.powf(-a)
                 } else {
                     (1.0 - (-x).exp() * x.powf(a) * egf_rek(a, x) / Gamma::gamma(a)) * x.powf(-a)

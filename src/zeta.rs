@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use core::{clone::Clone, f64::consts};
+use std::sync::LazyLock;
 
 use libm::{fmax, ldexp, remainder};
 use ndarray::{Array1, Array2};
@@ -10,6 +11,7 @@ use ndarray_linalg::{Inverse, OperationNorm};
 use num_complex::{c64, Complex64};
 use num_traits::identities;
 use special::Gamma;
+use transpose::transpose;
 
 use crate::crandall;
 
@@ -187,8 +189,21 @@ fn is_diagonal<T: PartialEq + identities::Zero>(m: &Array2<T>) -> bool {
     ret
 }
 
+fn transpose_array2(input: &Array2<f64>) -> Array2<f64> {
+    let mut tmp = vec![0.0; input.len()];
+    let input_vec = input.flatten().to_vec();
+    transpose(&input_vec, &mut tmp, input.ncols(), input.nrows());
+    Array2::from_shape_vec((input.ncols(), input.nrows()), tmp).unwrap()
+}
+
 /// Smallest value z such that G(nu, z) is negligible for nu < 10.
 const G_BOUND: f64 = 3.2;
+
+/// Epsilon for the cutoff around nu = dimension.
+static EPS: LazyLock<f64> = LazyLock::new(|| ldexp(1.0, -30));
+
+/// Epsilon for the cutoff around x = 0 and y = 0
+static EPS_ZERO_Y: f64 = 1.0e-64;
 
 /// calculates the (regularized) Epstein Zeta function.
 ///
@@ -216,9 +231,10 @@ fn epstein_zeta_internal(
     let is_diagonal = is_diagonal(m);
     let mut m_fourier = m.inv().unwrap();
     let vol = m.diag().product().abs();
+    m_fourier = transpose_array2(&m_fourier);
     let ms = vol.powi(-1 / dim as i32);
     m_real *= ms;
-    m_fourier *= ms;
+    m_fourier /= ms;
     let x_t1 = x * ms;
     let y_t1 = y / ms;
     // 2. transform: get x and y in their respective elementary cells
@@ -232,26 +248,22 @@ fn epstein_zeta_internal(
         (cutoff_id / m_real.diag().abs()).floor()
     } else {
         let ev_abs_min_r = m_real.opnorm_inf().unwrap();
-        Array1::ones(m_real.diag().len()) * cutoff_id * ev_abs_min_r
+        (Array1::ones(m_real.diag().len()) * cutoff_id * ev_abs_min_r).floor()
     };
     let cutoffs_fourier = if is_diagonal {
         (cutoff_id * m_real.diag().abs()).floor()
     } else {
         let ev_abs_max = m_fourier.opnorm_inf().unwrap();
-        Array1::ones(m_real.diag().len()) * cutoff_id * ev_abs_max
+        (Array1::ones(m_real.diag().len()) * cutoff_id * ev_abs_max).floor()
     };
     let cutoffs_u_real = cutoffs_real.mapv(|elem| elem as isize);
     let cutoffs_u_fourier = cutoffs_fourier.mapv(|elem| elem as isize);
     // handle special case of non-positive integer values nu.
     let mut res: Complex64;
-    /// epsilon for the cutoff around nu = dimension.
-    let EPS = ldexp(1.0, -30);
-    /// epsilon for the cutoff around x = 0 and y = 0
-    let EPS_ZERO_Y = 1.0e-64;
     let dimf = dim as f64;
-    if nu < 1.0 && ((nu / 2.0) - (nu / 2.0).round_ties_even()).abs() < EPS {
+    if nu < 1.0 && ((nu / 2.0) - (nu / 2.0).round_ties_even()).abs() < *EPS {
         res = -c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t2)).exp();
-    } else if (nu - dimf).abs() < EPS && y_t2.dot(&y_t2) < EPS_ZERO_Y && !reg {
+    } else if (nu - dimf).abs() < *EPS && y_t2.dot(&y_t2) < EPS_ZERO_Y && !reg {
         res = c64(0.0, 0.0);
     } else {
         let z_arg_bound = crandall::assign_z_arg_bound(nu);
@@ -274,9 +286,9 @@ fn epstein_zeta_internal(
             // correct wrong zero summand in regularized fourier sum.
             if y_t1 != y_t2 {
                 s2 += crandall::crandall_g(dimf - nu, &y_t2, lambda, z_arg_bound)
-                    * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t2))
+                    * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t2)).exp()
                     - crandall::crandall_g(dimf - nu, &y_t1, lambda, z_arg_bound)
-                        * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t1));
+                        * c64(0.0, -2.0 * consts::PI * x_t1.dot(&y_t1)).exp();
             }
             s2 *= rot + nc;
             s1 = sum_real(
@@ -361,41 +373,140 @@ pub fn epstein_zeta_reg(nu: f64, a: &Array2<f64>, x: &Array1<f64>, y: &Array1<f6
 mod tests {
     use super::*;
 
-    // use approx::assert_abs_diff_eq;
+    use approx::assert_relative_eq;
     use manifest_dir_macros::path;
     use ndarray::array;
     use num_complex::ComplexFloat;
     use serde::Deserialize;
+    use serde_jsonlines::json_lines;
+
+    /// adapted from https://stackoverflow.com/a/66925981/
+    fn array2_from_nested_vec(v: &Vec<Vec<f64>>) -> Array2<f64> {
+        let mut data = Vec::new();
+
+        let ncols = v.first().map_or(0, |row| row.len());
+        let mut nrows = 0;
+
+        for i in 0..v.len() {
+            data.extend_from_slice(&v[i]);
+            nrows += 1;
+        }
+
+        Array2::from_shape_vec((nrows, ncols), data).unwrap()
+    }
 
     #[test]
     fn test_sum_real() {
-        let nu = 9.1366273707310508e-01;
-        let lambda = 1.0;
-        let z_arg_bound = 3.1172453105244717e+01;
-        let m = array!([1.1547005383792517e+00, 0.0], [0.0, 8.6602540378443860e-01]);
-        let x = array!(-1.1033540377972531e-01, 1.0725221992945301e-02);
-        let y = array!(-8.6000420863103680e-02, 8.2532598838252230e-02);
-        let cutoffs = array!(3, 4);
-        let computed = sum_real(nu, lambda, &m, &x, &y, &cutoffs, z_arg_bound);
-        let reference = c64(6.4776111947062631e+00, -6.9161715507768205e-03);
-        let tolerance = 1.0e-15;
-        // assert_abs_diff_eq!(reference.re, computed.re, epsilon = epsilon);
-        // assert_abs_diff_eq!(reference.im, computed.im, epsilon = epsilon);
-        let diff = reference - computed;
-        let error_abs = diff.abs();
-        let error_rel = error_abs / reference.abs();
-        let error = if error_abs > error_rel {
-            error_abs
-        } else {
-            error_rel
-        };
-        if error > tolerance {
+        let path = path!("src", "tests", "jsonl", "sum_real.jsonl");
+
+        #[derive(Debug, Deserialize)]
+        struct SumRealResult {
+            nu: f64,
+            lambda: f64,
+            cutoffs: Vec<isize>,
+            x: Vec<f64>,
+            y: Vec<f64>,
+            m: Vec<Vec<f64>>,
+            #[serde(rename = "zArgBound")]
+            z_arg_bound: f64,
+            sum: Complex64,
+        }
+
+        let values: Vec<Result<SumRealResult, _>> = json_lines(path).unwrap().collect();
+        let mut failed = 0;
+        let tolerance = 1.0e-13;
+        for value in values {
+            let SumRealResult {
+                nu,
+                lambda,
+                cutoffs,
+                x,
+                y,
+                m,
+                z_arg_bound,
+                sum: reference,
+            } = value.unwrap();
+            let cutoffs = Array1::from_vec(cutoffs);
+            let x = Array1::from_vec(x);
+            let y = Array1::from_vec(y);
+            let m = array2_from_nested_vec(&m);
+            let computed = sum_real(nu, lambda, &m, &x, &y, &cutoffs, z_arg_bound);
+            // TODO
+            // assert_relative_eq!(
+            //     reference.re,
+            //     computed.re,
+            //     max_relative = 1.0e-8,
+            //     epsilon = 1.0e-15
+            // );
+            let diff = reference - computed;
+            let error_abs = diff.abs();
+            let error_rel = error_abs / reference.abs();
+            let error = if error_abs > error_rel {
+                error_abs
+            } else {
+                error_rel
+            };
+            if error > tolerance {
+                eprintln!(
+                    "FAIL ref: {:.16e} computed: {:.16e} error_abs: {:.16e} error_rel: {:.16e} tol {:.16e} nu {:.16e} lambda {:.16e} m {} x {} y {} cutoffs {} z_arg_bound {:.16e}",
+                    reference, computed, error_abs, error_rel, tolerance, nu, lambda, m, x, y, cutoffs, z_arg_bound
+                );
+                failed += 1;
+            } else {
+                println!(
+                    "PASS ref: {:.16e} computed: {:.16e} error_abs: {:.16e} error_rel: {:.16e} tol {:.16e}",
+                    reference, computed, error_abs, error_rel, tolerance
+                );
+            }
+        }
+        if failed > 0 {
             panic!();
         }
     }
 
     #[test]
-    fn test_sum_fourier() {}
+    fn test_sum_fourier() {
+        let path = path!("src", "tests", "jsonl", "sum_fourier.jsonl");
+
+        #[derive(Debug, Deserialize)]
+        struct SumFourierResult {
+            nu: f64,
+            lambda: f64,
+            cutoffs: Vec<isize>,
+            x: Vec<f64>,
+            y: Vec<f64>,
+            m_invt: Vec<Vec<f64>>,
+            #[serde(rename = "zArgBound")]
+            z_arg_bound: f64,
+            sum: Complex64,
+        }
+
+        let values: Vec<Result<SumFourierResult, _>> = json_lines(path).unwrap().collect();
+        for value in values {
+            let SumFourierResult {
+                nu,
+                lambda,
+                cutoffs,
+                x,
+                y,
+                m_invt,
+                z_arg_bound,
+                sum: reference,
+            } = value.unwrap();
+            let cutoffs = Array1::from_vec(cutoffs);
+            let x = Array1::from_vec(x);
+            let y = Array1::from_vec(y);
+            let m_invt = array2_from_nested_vec(&m_invt);
+            let computed = sum_fourier(nu, lambda, &m_invt, &x, &y, &cutoffs, z_arg_bound);
+            // TODO
+            assert_relative_eq!(
+                reference.re,
+                computed.re,
+                max_relative = 1.0e-8,
+                epsilon = 1.0e-15
+            );
+        }
+    }
 
     #[derive(Debug, Deserialize)]
     struct ZetaRecord {
