@@ -13,8 +13,10 @@ add_library(${TGT}
 if(UNIX)
     target_link_libraries(${TGT} m)
 endif(UNIX)
-# TODO hack
-target_include_directories(${TGT} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_include_directories(${TGT} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+    $<INSTALL_INTERFACE:include>)
+install(TARGETS ${TGT})
 unset(TGT)
 
 add_subdirectory(tests)
